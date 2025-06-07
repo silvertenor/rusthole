@@ -80,8 +80,8 @@ fn build_response(
     response
 }
 fn handle_client(mut message_buf: Vec<u8>, dns_records: &HashMap<String, Vec<IpAddr>>) -> Vec<u8> {
-    let mut id_buf = vec![0u8; 2]; // two bytes for ID
-    id_buf = message_buf[..2].to_vec();
+    // let mut id_buf = vec![0u8; 2]; // two bytes for ID
+    let mut id_buf = message_buf[..2].to_vec();
     message_buf = message_buf.get(12..).unwrap().to_vec();
     let (query, response_name) = get_dns_query_and_response(message_buf);
     let response = build_response(dns_records, query, response_name);
@@ -91,10 +91,10 @@ fn handle_client(mut message_buf: Vec<u8>, dns_records: &HashMap<String, Vec<IpA
 
 fn main() -> Result<()> {
     let lines: Vec<String> = get_hostnames_to_block("blockList.conf");
-    let mut dnsRecords = HashMap::new();
+    let mut dns_records = HashMap::new();
     for line in lines {
         if let Ok(ips) = lookup_hostname(&line) {
-            dnsRecords.insert(line, ips);
+            dns_records.insert(line, ips);
         };
     }
 
@@ -105,7 +105,7 @@ fn main() -> Result<()> {
         let mut buf = [0; 2048];
         let (number_of_bytes, src_addr) = socket.recv_from(&mut buf).expect("Didn't receive data");
         let filled_buf = Vec::from(buf.get(..number_of_bytes).unwrap());
-        let result = handle_client(filled_buf, &dnsRecords);
+        let result = handle_client(filled_buf, &dns_records);
         socket.send_to(&result, src_addr).expect("error");
     }
 }
