@@ -125,8 +125,8 @@ fn main() -> Result<()> {
         };
     }
 
-    let listener = TcpListener::bind("127.0.0.1:5353")?; // Use port 5353 for non-root testing
-    println!("DNS TCP server running on 127.0.0.1:5353");
+    let listener = TcpListener::bind("127.0.0.1:53")?; // Use port 5353 for non-root testing
+    println!("DNS TCP server running on 127.0.0.1:53");
 
     for stream in listener.incoming() {
         match stream {
