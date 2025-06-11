@@ -2,7 +2,18 @@ use dns_lookup::lookup_host;
 use std::io::Result;
 use std::net::UdpSocket;
 use std::{collections::HashMap, fs::read_to_string, net::IpAddr};
-
+pub mod packet;
+use crate::packet::{Header, ParsedSection, Section};
+fn handle_section(section: Section, buf: &Vec<u8>) -> ParsedSection {
+    match section {
+        Section::Header => Header::new(&buf),
+        Section::Question => ParsedSection::Question,
+        Section::Answer => ParsedSection::Answer,
+        Section::Authority => ParsedSection::Authority,
+        Section::Additional => ParsedSection::Additional,
+        _ => ParsedSection::Additional,
+    }
+}
 fn get_hostnames_to_block(filename: &str) -> Vec<String> {
     let mut result = Vec::new();
     for rawline in read_to_string(filename).unwrap().lines() {
@@ -79,8 +90,39 @@ fn build_response(
 
     response
 }
+
 fn handle_client(mut message_buf: Vec<u8>, dns_records: &HashMap<String, Vec<IpAddr>>) -> Vec<u8> {
     // let mut id_buf = vec![0u8; 2]; // two bytes for ID
+    // let header = handle_section(Section::Header, &message_buf);
+    println!("{}", handle_section(Section::Header, &message_buf));
+    // println!(
+    //     "{:?}",
+    //     u16::from(message_buf[0]) << 8 | message_buf[1] as u16
+    // );
+    // println!("QR: {:?}", message_buf[2] >> 7 & 1);
+    // println!("OPCODE: {:#06b}", message_buf[2] >> 3 & 0x0F);
+    // println!("AA: {:?}", message_buf[2] >> 2 & 1);
+    // println!("TC: {:?}", message_buf[2] >> 1 & 1);
+    // println!("RD: {:?}", message_buf[2] & 1);
+    // println!("RA: {:?}", message_buf[3] >> 7 & 1);
+    // println!("Z: {:#05b}", message_buf[3] >> 4 & 0x0F);
+    // println!(
+    //     "Questions: {:?}",
+    //     u16::from(message_buf[4]) << 8 | message_buf[5] as u16
+    // );
+    // println!(
+    //     "Answers: {:?}",
+    //     u16::from(message_buf[6]) << 8 | message_buf[7] as u16
+    // );
+    // println!(
+    //     "Authority Count: {:?}",
+    //     u16::from(message_buf[8]) << 8 | message_buf[9] as u16
+    // );
+    // println!(
+    //     "Additional: {:?}",
+    //     u16::from(message_buf[10]) << 8 | message_buf[11] as u16
+    // );
+
     let mut id_buf = message_buf[..2].to_vec();
     message_buf = message_buf.get(12..).unwrap().to_vec();
     let (query, response_name) = get_dns_query_and_response(message_buf);
@@ -102,7 +144,8 @@ fn main() -> Result<()> {
     println!("DNS TCP server running on 127.0.0.1:53");
 
     loop {
-        let mut buf = [0; 2048];
+        // DNS packets are limited to 512 bytes
+        let mut buf = [0; 512];
         let (number_of_bytes, src_addr) = socket.recv_from(&mut buf).expect("Didn't receive data");
         let filled_buf = Vec::from(buf.get(..number_of_bytes).unwrap());
         let result = handle_client(filled_buf, &dns_records);
