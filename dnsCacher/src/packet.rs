@@ -52,8 +52,8 @@ pub struct Preamble {
 
 #[derive(Debug)]
 pub struct Header {
-    id: u16,
-    qr: bool,
+    pub id: u16,
+    pub response: bool,
     opcode: u8,
     aa: bool,
     tc: bool,
@@ -61,7 +61,7 @@ pub struct Header {
     ra: bool,
     z: u8,
     rcode: u8,
-    qdcount: u16,
+    pub qdcount: u16,
     ancount: u16,
     nscount: u16,
     arcount: u16,
@@ -71,7 +71,7 @@ impl Header {
     pub fn new(buf: &Vec<u8>) -> ParsedSection {
         ParsedSection::Header(Header {
             id: u16::from(buf[0]) << 8 | buf[1] as u16,
-            qr: buf[2] >> 7 & 1 != 0,
+            response: buf[2] >> 7 & 1 != 0,
             opcode: buf[2] >> 3 & 0x0F,
             aa: buf[2] >> 2 & 1 != 0,
             tc: buf[2] >> 1 & 1 != 0,
@@ -84,10 +84,6 @@ impl Header {
             nscount: u16::from(buf[8]) << 8 | buf[9] as u16,
             arcount: u16::from(buf[10]) << 8 | buf[11] as u16,
         })
-    }
-
-    pub fn display(&self) -> () {
-        println!("{:?}", self);
     }
 }
 
@@ -109,7 +105,7 @@ Answers: {:?}
 Authority Count: {:?}
 Additional Count {:?}",
             self.id,
-            self.qr,
+            self.response,
             self.opcode,
             self.aa,
             self.tc,
@@ -124,8 +120,38 @@ Additional Count {:?}",
         )
     }
 }
+
+#[derive(Debug)]
 pub struct Question {
-    name: Vec<u8>,
-    qtype: [u8; 2],
-    class: [u8; 2],
+    pub name: String,
+    pub qtypes: Vec<[u8; 2]>,
+    pub classes: Vec<[u8; 2]>,
+}
+
+impl Question {
+    pub fn new() -> Question {
+        Question {
+            name: String::new(),
+            qtypes: Vec::new(),
+            classes: Vec::new(),
+        }
+    }
+
+    pub fn parse_question(&mut self, mut message_buf: Vec<u8>) {
+        let mut query = String::new();
+        'outer: loop {
+            let mut i: u8 = 1;
+            for j in i..=message_buf[0] {
+                query.push(message_buf[j as usize].to_ascii_lowercase() as char);
+                i = j + 1;
+            }
+            message_buf = message_buf.get((i as usize)..).unwrap().to_vec();
+            if message_buf[0] == 0 {
+                break 'outer;
+            } else {
+                query.push('.');
+            }
+        }
+        self.name = query;
+    }
 }

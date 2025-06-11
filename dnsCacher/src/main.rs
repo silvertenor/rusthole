@@ -3,7 +3,7 @@ use std::io::Result;
 use std::net::UdpSocket;
 use std::{collections::HashMap, fs::read_to_string, net::IpAddr};
 pub mod packet;
-use crate::packet::{Header, ParsedSection, Section};
+use crate::packet::{Header, ParsedSection, Question, Section};
 fn handle_section(section: Section, buf: &Vec<u8>) -> ParsedSection {
     match section {
         Section::Header => Header::new(&buf),
@@ -92,37 +92,17 @@ fn build_response(
 }
 
 fn handle_client(mut message_buf: Vec<u8>, dns_records: &HashMap<String, Vec<IpAddr>>) -> Vec<u8> {
-    // let mut id_buf = vec![0u8; 2]; // two bytes for ID
-    // let header = handle_section(Section::Header, &message_buf);
     println!("{}", handle_section(Section::Header, &message_buf));
-    // println!(
-    //     "{:?}",
-    //     u16::from(message_buf[0]) << 8 | message_buf[1] as u16
-    // );
-    // println!("QR: {:?}", message_buf[2] >> 7 & 1);
-    // println!("OPCODE: {:#06b}", message_buf[2] >> 3 & 0x0F);
-    // println!("AA: {:?}", message_buf[2] >> 2 & 1);
-    // println!("TC: {:?}", message_buf[2] >> 1 & 1);
-    // println!("RD: {:?}", message_buf[2] & 1);
-    // println!("RA: {:?}", message_buf[3] >> 7 & 1);
-    // println!("Z: {:#05b}", message_buf[3] >> 4 & 0x0F);
-    // println!(
-    //     "Questions: {:?}",
-    //     u16::from(message_buf[4]) << 8 | message_buf[5] as u16
-    // );
-    // println!(
-    //     "Answers: {:?}",
-    //     u16::from(message_buf[6]) << 8 | message_buf[7] as u16
-    // );
-    // println!(
-    //     "Authority Count: {:?}",
-    //     u16::from(message_buf[8]) << 8 | message_buf[9] as u16
-    // );
-    // println!(
-    //     "Additional: {:?}",
-    //     u16::from(message_buf[10]) << 8 | message_buf[11] as u16
-    // );
-
+    let h = handle_section(Section::Header, &message_buf);
+    if let ParsedSection::Header(header) = h {
+        if !header.response {
+            let mut question = Question::new();
+            question.parse_question(message_buf.get(12..).unwrap().to_vec());
+            println!("{:?}", question);
+        }
+    } else {
+        println!("Not a header!");
+    }
     let mut id_buf = message_buf[..2].to_vec();
     message_buf = message_buf.get(12..).unwrap().to_vec();
     let (query, response_name) = get_dns_query_and_response(message_buf);
