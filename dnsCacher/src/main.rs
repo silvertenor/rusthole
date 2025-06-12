@@ -3,11 +3,11 @@ use std::io::Result;
 use std::net::UdpSocket;
 use std::{collections::HashMap, fs::read_to_string, net::IpAddr};
 pub mod packet;
-use crate::packet::{DnsPacket, Header, ParsedSection, Question, Record, Section};
+use crate::packet::{DnsPacket, Header, ParsedSection, Query, Record, Section};
 fn handle_section(section: Section, buf: &Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
     match section {
         Section::Header => Header::new(&buf, dns_packet),
-        Section::Question => Question::new(buf.to_vec(), dns_packet),
+        Section::Question => Query::new(buf.to_vec(), dns_packet),
         // Section::Answer => ,
         Section::Authority => ParsedSection::Authority,
         Section::Additional => ParsedSection::Additional,
@@ -50,7 +50,7 @@ fn handle_client(message_buf: Vec<u8>, dns_records: &HashMap<String, Vec<IpAddr>
             let q = handle_section(Section::Question, &message_buf, &mut dns_packet);
 
             if let ParsedSection::Question((question)) = q {
-                dns_packet.set_question(&question, &message_buf);
+                dns_packet.set_query(&question);
                 let r = Record::new(&question, dns_records);
                 dns_packet.set_answer(&r);
                 // if Option::is_some(&dns_packet.authority) {

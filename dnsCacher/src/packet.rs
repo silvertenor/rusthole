@@ -13,7 +13,6 @@ pub struct DnsPacket {
     pub bytes: Vec<u8>,
     pub byte_pointer: usize,
 }
-
 impl DnsPacket {
     pub fn new(buf: &Vec<u8>) -> DnsPacket {
         DnsPacket {
@@ -31,9 +30,9 @@ impl DnsPacket {
         if let Some(header) = &self.get_header() {
             response_buf.extend_from_slice(&header);
         }
-        if let Some(question) = &self.get_question() {
+        if let Some(query) = &self.get_query() {
             // let question_bytes = question.response_buf.extend_from_slice(&buf.get);
-            response_buf.extend_from_slice(&question);
+            response_buf.extend_from_slice(&query);
         }
         if let Some(answer) = &self.get_answer() {
             response_buf.extend_from_slice(&answer);
@@ -68,105 +67,32 @@ impl DnsPacket {
         &self.header
     }
 
-    pub fn set_question(&mut self, q: &Question, buf: &Vec<u8>) {
+    pub fn set_query(&mut self, q: &Query) {
         let mut packet_question: Vec<u8> = Vec::new();
-        packet_question.extend_from_slice(&buf.get(q.start_index..q.end_index).unwrap());
+        packet_question.extend_from_slice(&q.name_bytes);
         packet_question.extend_from_slice(&q.qtype.to_be_bytes());
         packet_question.extend_from_slice(&q.class.to_be_bytes());
         self.question = Some(packet_question);
     }
 
-    pub fn get_question(&self) -> &Option<Vec<u8>> {
+    pub fn get_query(&self) -> &Option<Vec<u8>> {
         &self.question
     }
 
     pub fn set_answer(&mut self, r: &Record) {
         let mut packet_record: Vec<u8> = Vec::new();
-        packet_record.extend_from_slice(&r.preamble.name.to_be_bytes());
+        packet_record.extend_from_slice(&r.preamble.name);
         packet_record.extend_from_slice(&r.preamble.rtype.to_be_bytes());
         packet_record.extend_from_slice(&r.preamble.class.to_be_bytes());
         packet_record.extend_from_slice(&r.preamble.ttl.to_be_bytes());
         packet_record.extend_from_slice(&r.preamble.len.to_be_bytes());
+        packet_record.extend_from_slice(&r.ip);
         self.answer = Some(packet_record);
     }
 
     pub fn get_answer(&self) -> &Option<Vec<u8>> {
         &self.answer
     }
-}
-
-pub enum Section {
-    Header,
-    Question,
-    // Answer,
-    Authority,
-    Additional,
-}
-
-#[derive(Debug)]
-pub enum ParsedSection {
-    Header(Header),
-    Question(Question),
-    Authority,
-    Additional,
-}
-
-impl fmt::Display for ParsedSection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ParsedSection::Header(h) => write!(f, "Header:\n{}", h),
-            ParsedSection::Question(q) => write!(f, "Question section"),
-            ParsedSection::Authority => write!(f, "Authority section"),
-            ParsedSection::Additional => write!(f, "Additional section"),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Record {
-    preamble: Preamble,
-    ip: [u8; 4],
-}
-impl Record {
-    pub fn new(q: &Question, dns_records: &HashMap<String, Vec<IpAddr>>) -> Record {
-        // Get record:
-        let mut first: u8 = 127;
-        let mut second: u8 = 0;
-        let mut third: u8 = 0;
-        let mut fourth: u8 = 0;
-        if dns_records.contains_key(&q.name) {
-            let ip_addr = &dns_records
-                .get(&q.name)
-                .unwrap()
-                .get(0)
-                .unwrap()
-                .to_string();
-            let split: Vec<&str> = ip_addr.split('.').collect();
-            first = split.get(0).unwrap().parse().unwrap();
-            second = split.get(1).unwrap().parse().unwrap();
-            third = split.get(2).unwrap().parse().unwrap();
-            fourth = split.get(3).unwrap().parse().unwrap();
-        }
-        let preamble = Preamble {
-            name: 0xC00C,
-            rtype: q.qtype,
-            class: q.class,
-            ttl: 600,
-            len: 4,
-        };
-        Record {
-            preamble,
-            ip: [first, second, third, fourth],
-        }
-    }
-}
-#[derive(Debug)]
-pub struct Preamble {
-    name: u32,
-    rtype: u16,
-    class: u16,
-    ttl: u32,
-    len: u16,
 }
 
 #[derive(Debug)]
@@ -185,7 +111,6 @@ pub struct Header {
     nscount: u16,
     arcount: u16,
 }
-
 impl Header {
     pub fn new(buf: &Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
         // Increment byte pointer to 12 - the first byte after the header
@@ -207,7 +132,6 @@ impl Header {
         })
     }
 }
-
 impl fmt::Display for Header {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -243,15 +167,15 @@ Additional Count {:?}",
 }
 
 #[derive(Debug)]
-pub struct Question {
-    pub name: String,
+pub struct Query {
+    pub name_str: String,
+    pub name_bytes: Vec<u8>,
     pub qtype: u16,
     pub class: u16,
     pub start_index: usize,
     pub end_index: usize,
 }
-
-impl Question {
+impl Query {
     pub fn new(message_buf: Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
         let start_index = dns_packet.byte_pointer as usize; // for struct
         let mut bp = dns_packet.byte_pointer; // to save space in arr indexing
@@ -271,17 +195,92 @@ impl Question {
         }
         let end_index = bp as usize; // for struct
         dns_packet.byte_pointer = bp;
-        let name = query;
+        let name_str = query;
+        let name_bytes = message_buf.get(start_index..end_index).unwrap().to_vec();
         let qtype = u16::from(message_buf[bp]) << 8 | message_buf[bp + 1] as u16;
         let class = u16::from(message_buf[bp + 2]) << 8 | message_buf[bp + 3] as u16;
         dns_packet.byte_pointer += 3;
-        ParsedSection::Question(Question {
-            name,
+        ParsedSection::Question(Query {
+            name_str,
+            name_bytes,
             qtype,
             class,
             start_index,
             end_index,
         })
+    }
+}
+
+#[derive(Debug)]
+pub struct Preamble {
+    name: Vec<u8>,
+    rtype: u16,
+    class: u16,
+    ttl: u32,
+    len: u16,
+}
+
+#[derive(Debug)]
+pub struct Record {
+    preamble: Preamble,
+    ip: [u8; 4],
+}
+impl Record {
+    pub fn new(q: &Query, dns_records: &HashMap<String, Vec<IpAddr>>) -> Record {
+        // Get record:
+        let mut first: u8 = 127;
+        let mut second: u8 = 0;
+        let mut third: u8 = 0;
+        let mut fourth: u8 = 0;
+        if dns_records.contains_key(&q.name_str) {
+            let ip_addr = &dns_records
+                .get(&q.name_str)
+                .unwrap()
+                .get(0)
+                .unwrap()
+                .to_string();
+            let split: Vec<&str> = ip_addr.split('.').collect();
+            first = split.get(0).unwrap().parse().unwrap();
+            second = split.get(1).unwrap().parse().unwrap();
+            third = split.get(2).unwrap().parse().unwrap();
+            fourth = split.get(3).unwrap().parse().unwrap();
+        }
+        let preamble = Preamble {
+            name: q.name_bytes.to_vec(),
+            rtype: q.qtype,
+            class: q.class,
+            ttl: 600,
+            len: 4,
+        };
+        Record {
+            preamble,
+            ip: [first, second, third, fourth],
+        }
+    }
+}
+pub enum Section {
+    Header,
+    Question,
+    // Answer,
+    Authority,
+    Additional,
+}
+
+#[derive(Debug)]
+pub enum ParsedSection {
+    Header(Header),
+    Question(Query),
+    Authority,
+    Additional,
+}
+impl fmt::Display for ParsedSection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ParsedSection::Header(h) => write!(f, "Header:\n{}", h),
+            ParsedSection::Question(q) => write!(f, "Question section"),
+            ParsedSection::Authority => write!(f, "Authority section"),
+            ParsedSection::Additional => write!(f, "Additional section"),
+        }
     }
 }
 
