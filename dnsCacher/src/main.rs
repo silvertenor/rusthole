@@ -102,6 +102,14 @@ fn handle_client(mut message_buf: Vec<u8>, dns_records: &HashMap<String, Vec<IpA
             let q = handle_section(Section::Question, &message_buf, &mut dns_packet);
             println!("{:?}", message_buf.get(dns_packet.byte_pointer..).unwrap());
             println!("{:?}", q);
+            if let ParsedSection::Question((question)) = q {
+                println!(
+                    "{:?}",
+                    message_buf
+                        .get(question.start_index as usize..question.end_index as usize)
+                        .unwrap()
+                );
+            }
         }
     } else {
         todo!();

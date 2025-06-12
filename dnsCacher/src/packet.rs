@@ -144,62 +144,42 @@ pub struct Question {
     pub name: String,
     pub qtype: u16,
     pub class: u16,
+    pub start_index: u8,
+    pub end_index: u8,
 }
 
 impl Question {
-    pub fn new(mut message_buf: Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
-        let start_index: usize = dns_packet.byte_pointer;
-        message_buf = message_buf.get(start_index..).unwrap().to_vec();
+    pub fn new(message_buf: Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
+        let start_index = dns_packet.byte_pointer as u8; // for struct
+        let mut bp = dns_packet.byte_pointer; // to save space in arr indexing
         let mut query = String::new();
+        // "Build" question string from label syntax in packet
         'outer: loop {
-            let mut i: u8 = 1;
-            for j in i..=message_buf[0] {
-                query.push(message_buf[j as usize].to_ascii_lowercase() as char);
-                i = j + 1;
-                // Update byte pointer:
-                dns_packet.byte_pointer += 1;
-            }
-            message_buf = message_buf.get((i as usize)..).unwrap().to_vec();
-            if message_buf[0] == 0 {
-                dns_packet.byte_pointer += 1;
+            let start_char_index = bp + 1;
+            let end_char_index = start_char_index + message_buf[bp] as usize;
+            bp = end_char_index;
+            query.push_str(str::from_utf8(&message_buf[start_char_index..end_char_index]).unwrap());
+            if message_buf[bp] == 0 {
+                bp += 1;
                 break 'outer;
             } else {
-                dns_packet.byte_pointer += 1;
                 query.push('.');
             }
         }
-        println!("{:?}", dns_packet.byte_pointer);
-        // println!("{:?}", )
+        let end_index = bp as u8; // for struct
+        dns_packet.byte_pointer = bp;
         let name = query;
-        let type_index = (1) as usize;
-        let qtype = u16::from(message_buf[type_index]) << 8 | message_buf[type_index + 1] as u16;
-        let class_index = type_index + 2 as usize;
-        let class = u16::from(message_buf[class_index]) << 8 | message_buf[class_index + 1] as u16;
-        ParsedSection::Question(Question { name, qtype, class })
+        let qtype = u16::from(message_buf[bp]) << 8 | message_buf[bp + 1] as u16;
+        let class = u16::from(message_buf[bp + 2]) << 8 | message_buf[bp + 3] as u16;
+        dns_packet.byte_pointer += 3;
+        ParsedSection::Question(Question {
+            name,
+            qtype,
+            class,
+            start_index,
+            end_index,
+        })
     }
-    // pub fn parse_question(&mut self, mut message_buf: Vec<u8>) {
-    //     let mut query = String::new();
-    //     'outer: loop {
-    //         let mut i: u8 = 1;
-    //         for j in i..=message_buf[0] {
-    //             query.push(message_buf[j as usize].to_ascii_lowercase() as char);
-    //             i = j + 1;
-    //         }
-    //         message_buf = message_buf.get((i as usize)..).unwrap().to_vec();
-    //         if message_buf[0] == 0 {
-    //             break 'outer;
-    //         } else {
-    //             query.push('.');
-    //         }
-    //     }
-    //     // end of query relative to 12-byte offset for the QUERY section (however the message_buf is altered here so it will be relative to last change)
-    //     self.eof = message_buf.iter().position(|&i| i == 0).unwrap() as u16;
-    //     self.name = query;
-    //     let type_index = (self.eof + 1) as usize;
-    //     self.qtype = u16::from(message_buf[type_index]) << 8 | message_buf[type_index + 1] as u16;
-    //     let class_index = type_index + 2 as usize;
-    //     self.class = u16::from(message_buf[class_index]) << 8 | message_buf[class_index + 1] as u16;
-    // }
 }
 
 #[cfg(test)]
@@ -212,7 +192,8 @@ mod tests {
         for i in 0..12 {
             buf[i] = 128 - i as u8;
         }
-        let h = Header::new(&buf);
+        let mut dns_packet = DnsPacket::new(&buf);
+        let h = Header::new(&buf, &mut dns_packet);
         if let ParsedSection::Header(header) = h {
             assert_eq!(header.id, 32895);
             assert_eq!(header.response, false);
