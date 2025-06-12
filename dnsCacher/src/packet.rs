@@ -1,14 +1,15 @@
 use std::fmt;
+use std::{collections::HashMap, net::IpAddr};
 
 use pnet::packet;
 
 #[derive(Debug)]
 pub struct DnsPacket {
     header: Option<Vec<u8>>,
-    question: Option<Question>,
-    answer: Option<Record>,
-    authority: Option<Record>,
-    additional: Option<Record>,
+    question: Option<Vec<u8>>,
+    answer: Option<Vec<u8>>,
+    pub authority: Option<Vec<u8>>,
+    pub additional: Option<Vec<u8>>,
     pub bytes: Vec<u8>,
     pub byte_pointer: usize,
 }
@@ -25,12 +26,31 @@ impl DnsPacket {
             byte_pointer: 0,
         }
     }
-
+    pub fn build_packet(&mut self) -> Vec<u8> {
+        let mut response_buf: Vec<u8> = Vec::with_capacity(512);
+        if let Some(header) = &self.get_header() {
+            response_buf.extend_from_slice(&header);
+        }
+        if let Some(question) = &self.get_question() {
+            // let question_bytes = question.response_buf.extend_from_slice(&buf.get);
+            response_buf.extend_from_slice(&question);
+        }
+        if let Some(answer) = &self.get_answer() {
+            response_buf.extend_from_slice(&answer);
+        }
+        if Option::is_some(&self.authority) {
+            todo!();
+        }
+        if Option::is_some(&self.additional) {
+            todo!();
+        }
+        response_buf
+    }
     pub fn set_header(&mut self, header: Header) {
         let mut packet_header: Vec<u8> = Vec::with_capacity(12);
         packet_header.extend_from_slice(&header.id.to_be_bytes());
         packet_header.extend_from_slice(&[(header.response as u8) << 7
-            | (header.opcode as u8) << 6
+            | (header.opcode as u8) << 3
             | (header.aa as u8) << 2
             | (header.tc as u8) << 1
             | (header.rd as u8)]);
@@ -46,6 +66,32 @@ impl DnsPacket {
 
     pub fn get_header(&self) -> &Option<Vec<u8>> {
         &self.header
+    }
+
+    pub fn set_question(&mut self, q: &Question, buf: &Vec<u8>) {
+        let mut packet_question: Vec<u8> = Vec::new();
+        packet_question.extend_from_slice(&buf.get(q.start_index..q.end_index).unwrap());
+        packet_question.extend_from_slice(&q.qtype.to_be_bytes());
+        packet_question.extend_from_slice(&q.class.to_be_bytes());
+        self.question = Some(packet_question);
+    }
+
+    pub fn get_question(&self) -> &Option<Vec<u8>> {
+        &self.question
+    }
+
+    pub fn set_answer(&mut self, r: &Record) {
+        let mut packet_record: Vec<u8> = Vec::new();
+        packet_record.extend_from_slice(&r.preamble.name.to_be_bytes());
+        packet_record.extend_from_slice(&r.preamble.rtype.to_be_bytes());
+        packet_record.extend_from_slice(&r.preamble.class.to_be_bytes());
+        packet_record.extend_from_slice(&r.preamble.ttl.to_be_bytes());
+        packet_record.extend_from_slice(&r.preamble.len.to_be_bytes());
+        self.answer = Some(packet_record);
+    }
+
+    pub fn get_answer(&self) -> &Option<Vec<u8>> {
+        &self.answer
     }
 }
 
@@ -77,18 +123,50 @@ impl fmt::Display for ParsedSection {
 }
 
 #[derive(Debug)]
-struct Record {
+pub struct Record {
     preamble: Preamble,
     ip: [u8; 4],
 }
-
+impl Record {
+    pub fn new(q: &Question, dns_records: &HashMap<String, Vec<IpAddr>>) -> Record {
+        // Get record:
+        let mut first: u8 = 127;
+        let mut second: u8 = 0;
+        let mut third: u8 = 0;
+        let mut fourth: u8 = 0;
+        if dns_records.contains_key(&q.name) {
+            let ip_addr = &dns_records
+                .get(&q.name)
+                .unwrap()
+                .get(0)
+                .unwrap()
+                .to_string();
+            let split: Vec<&str> = ip_addr.split('.').collect();
+            first = split.get(0).unwrap().parse().unwrap();
+            second = split.get(1).unwrap().parse().unwrap();
+            third = split.get(2).unwrap().parse().unwrap();
+            fourth = split.get(3).unwrap().parse().unwrap();
+        }
+        let preamble = Preamble {
+            name: 0xC00C,
+            rtype: q.qtype,
+            class: q.class,
+            ttl: 600,
+            len: 4,
+        };
+        Record {
+            preamble,
+            ip: [first, second, third, fourth],
+        }
+    }
+}
 #[derive(Debug)]
 pub struct Preamble {
-    name: Vec<u8>,
-    rtype: [u8; 2],
-    class: [u8; 2],
-    ttl: [usize; 4],
-    len: [u8; 2],
+    name: u32,
+    rtype: u16,
+    class: u16,
+    ttl: u32,
+    len: u16,
 }
 
 #[derive(Debug)]
@@ -98,12 +176,12 @@ pub struct Header {
     opcode: u8,
     aa: bool,
     tc: bool,
-    rd: bool,
+    pub rd: bool,
     ra: bool,
     z: u8,
     rcode: u8,
     pub qdcount: u16,
-    ancount: u16,
+    pub ancount: u16,
     nscount: u16,
     arcount: u16,
 }
@@ -207,34 +285,6 @@ impl Question {
     }
 }
 
-#[derive(Debug)]
-pub struct Answer {
-    name: Vec<u8>,
-    atype: u16,
-    class: u16,
-    ttl: u32,
-    len: u16,
-}
-
-impl Answer {
-    pub fn new(buf: &Vec<u8>, q: &Question) -> Answer {
-        Answer {
-            name: buf.get(q.start_index..q.end_index).unwrap().to_vec(),
-            atype: q.qtype,
-            class: q.class,
-            ttl: 600,
-            len: 4,
-        }
-    }
-
-    // ParsedSection::Answer(Answer {
-    //         name: buf.get(q.start_index..q.end_index).unwrap().to_vec(),
-    //         atype: q.qtype,
-    //         class: q.class,
-    //         ttl: 0,
-    //         len: 0,
-    //     })
-}
 #[cfg(test)]
 mod tests {
     use super::*;
