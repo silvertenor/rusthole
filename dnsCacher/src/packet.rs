@@ -1,5 +1,6 @@
 use std::fmt;
 
+#[derive(Debug)]
 pub struct DnsPacket {
     header: Option<Header>,
     question: Option<Question>,
@@ -22,12 +23,16 @@ impl DnsPacket {
             byte_pointer: 0,
         }
     }
+
+    pub fn set_header(&mut self, header: Header) {
+        self.header = Some(header);
+    }
 }
 
 pub enum Section {
     Header,
     Question,
-    Answer,
+    // Answer,
     Authority,
     Additional,
 }
@@ -36,7 +41,7 @@ pub enum Section {
 pub enum ParsedSection {
     Header(Header),
     Question(Question),
-    Answer,
+    // Answer(Answer),
     Authority,
     Additional,
 }
@@ -46,18 +51,20 @@ impl fmt::Display for ParsedSection {
         match self {
             ParsedSection::Header(h) => write!(f, "Header:\n{}", h),
             ParsedSection::Question(q) => write!(f, "Question section"),
-            ParsedSection::Answer => write!(f, "Answer section"),
+            // ParsedSection::Answer(ans) => write!(f, "Answer section"),
             ParsedSection::Authority => write!(f, "Authority section"),
             ParsedSection::Additional => write!(f, "Additional section"),
         }
     }
 }
 
+#[derive(Debug)]
 struct Record {
     preamble: Preamble,
     ip: [u8; 4],
 }
 
+#[derive(Debug)]
 pub struct Preamble {
     name: Vec<u8>,
     rtype: [u8; 2],
@@ -144,13 +151,13 @@ pub struct Question {
     pub name: String,
     pub qtype: u16,
     pub class: u16,
-    pub start_index: u8,
-    pub end_index: u8,
+    pub start_index: usize,
+    pub end_index: usize,
 }
 
 impl Question {
     pub fn new(message_buf: Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
-        let start_index = dns_packet.byte_pointer as u8; // for struct
+        let start_index = dns_packet.byte_pointer as usize; // for struct
         let mut bp = dns_packet.byte_pointer; // to save space in arr indexing
         let mut query = String::new();
         // "Build" question string from label syntax in packet
@@ -166,7 +173,7 @@ impl Question {
                 query.push('.');
             }
         }
-        let end_index = bp as u8; // for struct
+        let end_index = bp as usize; // for struct
         dns_packet.byte_pointer = bp;
         let name = query;
         let qtype = u16::from(message_buf[bp]) << 8 | message_buf[bp + 1] as u16;
@@ -182,6 +189,33 @@ impl Question {
     }
 }
 
+pub struct Answer {
+    name: Vec<u8>,
+    atype: u16,
+    class: u16,
+    ttl: u32,
+    len: u16,
+}
+
+// impl Answer {
+//     pub fn new() -> ParsedSection {
+//         ParsedSection::Answer(Answer {
+//             name: Vec::new(),
+//             atype: 0,
+//             class: 0,
+//             ttl: 0,
+//             len: 0,
+//         })
+//     }
+
+//     // ParsedSection::Answer(Answer {
+//     //         name: buf.get(q.start_index..q.end_index).unwrap().to_vec(),
+//     //         atype: q.qtype,
+//     //         class: q.class,
+//     //         ttl: 0,
+//     //         len: 0,
+//     //     })
+// }
 #[cfg(test)]
 mod tests {
     use super::*;

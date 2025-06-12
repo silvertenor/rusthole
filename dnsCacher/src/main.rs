@@ -8,7 +8,7 @@ fn handle_section(section: Section, buf: &Vec<u8>, dns_packet: &mut DnsPacket) -
     match section {
         Section::Header => Header::new(&buf, dns_packet),
         Section::Question => Question::new(buf.to_vec(), dns_packet),
-        Section::Answer => ParsedSection::Answer,
+        // Section::Answer => ,
         Section::Authority => ParsedSection::Authority,
         Section::Additional => ParsedSection::Additional,
         _ => ParsedSection::Additional,
@@ -97,11 +97,15 @@ fn handle_client(mut message_buf: Vec<u8>, dns_records: &HashMap<String, Vec<IpA
     let h = handle_section(Section::Header, &message_buf, &mut dns_packet);
     // If header is DNS query, parse the queries - if not, forward the packet
     // #TODO - implement packet forwarding for responses
-    if let ParsedSection::Header(header) = h {
+    if let ParsedSection::Header(mut header) = h {
+        // If packet is a DNS query:
         if !header.response {
+            // Start building response packet:
+            header.response = true;
+            dns_packet.set_header(header);
+            // Get question from packet
             let q = handle_section(Section::Question, &message_buf, &mut dns_packet);
-            println!("{:?}", message_buf.get(dns_packet.byte_pointer..).unwrap());
-            println!("{:?}", q);
+
             if let ParsedSection::Question((question)) = q {
                 println!(
                     "{:?}",
