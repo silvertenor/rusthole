@@ -1,11 +1,27 @@
 use std::fmt;
 
 pub struct DnsPacket {
-    header: Header,
-    question: Question,
-    answer: Record,
-    authority: Record,
-    additional: Record,
+    header: Option<Header>,
+    question: Option<Question>,
+    answer: Option<Record>,
+    authority: Option<Record>,
+    additional: Option<Record>,
+    pub bytes: Vec<u8>,
+    pub byte_pointer: usize,
+}
+
+impl DnsPacket {
+    pub fn new(buf: &Vec<u8>) -> DnsPacket {
+        DnsPacket {
+            header: None,
+            question: None,
+            answer: None,
+            authority: None,
+            additional: None,
+            bytes: buf.to_vec(),
+            byte_pointer: 0,
+        }
+    }
 }
 
 pub enum Section {
@@ -19,7 +35,7 @@ pub enum Section {
 #[derive(Debug)]
 pub enum ParsedSection {
     Header(Header),
-    Question,
+    Question(Question),
     Answer,
     Authority,
     Additional,
@@ -29,7 +45,7 @@ impl fmt::Display for ParsedSection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ParsedSection::Header(h) => write!(f, "Header:\n{}", h),
-            ParsedSection::Question => write!(f, "Question section"),
+            ParsedSection::Question(q) => write!(f, "Question section"),
             ParsedSection::Answer => write!(f, "Answer section"),
             ParsedSection::Authority => write!(f, "Authority section"),
             ParsedSection::Additional => write!(f, "Additional section"),
@@ -68,7 +84,9 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn new(buf: &Vec<u8>) -> ParsedSection {
+    pub fn new(buf: &Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
+        // Increment byte pointer to 12 - the first byte after the header
+        dns_packet.byte_pointer = 12;
         ParsedSection::Header(Header {
             id: u16::from(buf[0]) << 8 | buf[1] as u16,
             response: buf[2] >> 7 & 1 != 0,
@@ -124,36 +142,64 @@ Additional Count {:?}",
 #[derive(Debug)]
 pub struct Question {
     pub name: String,
-    pub qtypes: Vec<[u8; 2]>,
-    pub classes: Vec<[u8; 2]>,
+    pub qtype: u16,
+    pub class: u16,
 }
 
 impl Question {
-    pub fn new() -> Question {
-        Question {
-            name: String::new(),
-            qtypes: Vec::new(),
-            classes: Vec::new(),
-        }
-    }
-
-    pub fn parse_question(&mut self, mut message_buf: Vec<u8>) {
+    pub fn new(mut message_buf: Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
+        let start_index: usize = dns_packet.byte_pointer;
+        message_buf = message_buf.get(start_index..).unwrap().to_vec();
         let mut query = String::new();
         'outer: loop {
             let mut i: u8 = 1;
             for j in i..=message_buf[0] {
                 query.push(message_buf[j as usize].to_ascii_lowercase() as char);
                 i = j + 1;
+                // Update byte pointer:
+                dns_packet.byte_pointer += 1;
             }
             message_buf = message_buf.get((i as usize)..).unwrap().to_vec();
             if message_buf[0] == 0 {
+                dns_packet.byte_pointer += 1;
                 break 'outer;
             } else {
+                dns_packet.byte_pointer += 1;
                 query.push('.');
             }
         }
-        self.name = query;
+        println!("{:?}", dns_packet.byte_pointer);
+        // println!("{:?}", )
+        let name = query;
+        let type_index = (1) as usize;
+        let qtype = u16::from(message_buf[type_index]) << 8 | message_buf[type_index + 1] as u16;
+        let class_index = type_index + 2 as usize;
+        let class = u16::from(message_buf[class_index]) << 8 | message_buf[class_index + 1] as u16;
+        ParsedSection::Question(Question { name, qtype, class })
     }
+    // pub fn parse_question(&mut self, mut message_buf: Vec<u8>) {
+    //     let mut query = String::new();
+    //     'outer: loop {
+    //         let mut i: u8 = 1;
+    //         for j in i..=message_buf[0] {
+    //             query.push(message_buf[j as usize].to_ascii_lowercase() as char);
+    //             i = j + 1;
+    //         }
+    //         message_buf = message_buf.get((i as usize)..).unwrap().to_vec();
+    //         if message_buf[0] == 0 {
+    //             break 'outer;
+    //         } else {
+    //             query.push('.');
+    //         }
+    //     }
+    //     // end of query relative to 12-byte offset for the QUERY section (however the message_buf is altered here so it will be relative to last change)
+    //     self.eof = message_buf.iter().position(|&i| i == 0).unwrap() as u16;
+    //     self.name = query;
+    //     let type_index = (self.eof + 1) as usize;
+    //     self.qtype = u16::from(message_buf[type_index]) << 8 | message_buf[type_index + 1] as u16;
+    //     let class_index = type_index + 2 as usize;
+    //     self.class = u16::from(message_buf[class_index]) << 8 | message_buf[class_index + 1] as u16;
+    // }
 }
 
 #[cfg(test)]

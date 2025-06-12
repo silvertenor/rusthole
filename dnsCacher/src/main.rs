@@ -3,11 +3,11 @@ use std::io::Result;
 use std::net::UdpSocket;
 use std::{collections::HashMap, fs::read_to_string, net::IpAddr};
 pub mod packet;
-use crate::packet::{Header, ParsedSection, Question, Section};
-fn handle_section(section: Section, buf: &Vec<u8>) -> ParsedSection {
+use crate::packet::{DnsPacket, Header, ParsedSection, Question, Section};
+fn handle_section(section: Section, buf: &Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
     match section {
-        Section::Header => Header::new(&buf),
-        Section::Question => ParsedSection::Question,
+        Section::Header => Header::new(&buf, dns_packet),
+        Section::Question => Question::new(buf.to_vec(), dns_packet),
         Section::Answer => ParsedSection::Answer,
         Section::Authority => ParsedSection::Authority,
         Section::Additional => ParsedSection::Additional,
@@ -92,16 +92,19 @@ fn build_response(
 }
 
 fn handle_client(mut message_buf: Vec<u8>, dns_records: &HashMap<String, Vec<IpAddr>>) -> Vec<u8> {
-    println!("{}", handle_section(Section::Header, &message_buf));
-    let h = handle_section(Section::Header, &message_buf);
+    let mut dns_packet = DnsPacket::new(&message_buf);
+    // Extract header from buffer
+    let h = handle_section(Section::Header, &message_buf, &mut dns_packet);
+    // If header is DNS query, parse the queries - if not, forward the packet
+    // #TODO - implement packet forwarding for responses
     if let ParsedSection::Header(header) = h {
         if !header.response {
-            let mut question = Question::new();
-            question.parse_question(message_buf.get(12..).unwrap().to_vec());
-            println!("{:?}", question);
+            let q = handle_section(Section::Question, &message_buf, &mut dns_packet);
+            println!("{:?}", message_buf.get(dns_packet.byte_pointer..).unwrap());
+            println!("{:?}", q);
         }
     } else {
-        println!("Not a header!");
+        todo!();
     }
     let mut id_buf = message_buf[..2].to_vec();
     message_buf = message_buf.get(12..).unwrap().to_vec();
