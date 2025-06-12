@@ -80,7 +80,7 @@ fn main() -> Result<()> {
     }
 
     let socket = UdpSocket::bind("127.0.0.1:53")?;
-    println!("DNS TCP server running on 127.0.0.1:53");
+    println!("DNS server running on 127.0.0.1:53");
 
     loop {
         // DNS packets are limited to 512 bytes
