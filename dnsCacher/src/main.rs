@@ -3,7 +3,7 @@ use std::io::Result;
 use std::net::UdpSocket;
 use std::{collections::HashMap, fs::read_to_string, net::IpAddr};
 pub mod packet;
-use crate::packet::{DnsPacket, Header, ParsedSection, Question, Section};
+use crate::packet::{Answer, DnsPacket, Header, ParsedSection, Question, Section};
 fn handle_section(section: Section, buf: &Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
     match section {
         Section::Header => Header::new(&buf, dns_packet),
@@ -107,12 +107,12 @@ fn handle_client(mut message_buf: Vec<u8>, dns_records: &HashMap<String, Vec<IpA
             let q = handle_section(Section::Question, &message_buf, &mut dns_packet);
 
             if let ParsedSection::Question((question)) = q {
-                println!(
-                    "{:?}",
-                    message_buf
-                        .get(question.start_index as usize..question.end_index as usize)
-                        .unwrap()
-                );
+                let a = Answer::new(&message_buf, &question);
+                // println!("{:?}", dns_packet.get_header());
+                for byte in dns_packet.get_header().as_ref().unwrap() {
+                    println!("{:x}", byte);
+                }
+                println!("{:?}", a);
             }
         }
     } else {

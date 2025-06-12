@@ -1,8 +1,10 @@
 use std::fmt;
 
+use pnet::packet;
+
 #[derive(Debug)]
 pub struct DnsPacket {
-    header: Option<Header>,
+    header: Option<Vec<u8>>,
     question: Option<Question>,
     answer: Option<Record>,
     authority: Option<Record>,
@@ -25,7 +27,25 @@ impl DnsPacket {
     }
 
     pub fn set_header(&mut self, header: Header) {
-        self.header = Some(header);
+        let mut packet_header: Vec<u8> = Vec::with_capacity(12);
+        packet_header.extend_from_slice(&header.id.to_be_bytes());
+        packet_header.extend_from_slice(&[(header.response as u8) << 7
+            | (header.opcode as u8) << 6
+            | (header.aa as u8) << 2
+            | (header.tc as u8) << 1
+            | (header.rd as u8)]);
+        packet_header.extend_from_slice(&[(header.ra as u8) << 7
+            | (header.z as u8) << 4
+            | (header.rcode as u8)]);
+        packet_header.extend_from_slice(&header.qdcount.to_be_bytes());
+        packet_header.extend_from_slice(&header.ancount.to_be_bytes());
+        packet_header.extend_from_slice(&header.nscount.to_be_bytes());
+        packet_header.extend_from_slice(&header.arcount.to_be_bytes());
+        self.header = Some(packet_header);
+    }
+
+    pub fn get_header(&self) -> &Option<Vec<u8>> {
+        &self.header
     }
 }
 
@@ -41,7 +61,6 @@ pub enum Section {
 pub enum ParsedSection {
     Header(Header),
     Question(Question),
-    // Answer(Answer),
     Authority,
     Additional,
 }
@@ -51,7 +70,6 @@ impl fmt::Display for ParsedSection {
         match self {
             ParsedSection::Header(h) => write!(f, "Header:\n{}", h),
             ParsedSection::Question(q) => write!(f, "Question section"),
-            // ParsedSection::Answer(ans) => write!(f, "Answer section"),
             ParsedSection::Authority => write!(f, "Authority section"),
             ParsedSection::Additional => write!(f, "Additional section"),
         }
@@ -189,6 +207,7 @@ impl Question {
     }
 }
 
+#[derive(Debug)]
 pub struct Answer {
     name: Vec<u8>,
     atype: u16,
@@ -197,25 +216,25 @@ pub struct Answer {
     len: u16,
 }
 
-// impl Answer {
-//     pub fn new() -> ParsedSection {
-//         ParsedSection::Answer(Answer {
-//             name: Vec::new(),
-//             atype: 0,
-//             class: 0,
-//             ttl: 0,
-//             len: 0,
-//         })
-//     }
+impl Answer {
+    pub fn new(buf: &Vec<u8>, q: &Question) -> Answer {
+        Answer {
+            name: buf.get(q.start_index..q.end_index).unwrap().to_vec(),
+            atype: q.qtype,
+            class: q.class,
+            ttl: 600,
+            len: 4,
+        }
+    }
 
-//     // ParsedSection::Answer(Answer {
-//     //         name: buf.get(q.start_index..q.end_index).unwrap().to_vec(),
-//     //         atype: q.qtype,
-//     //         class: q.class,
-//     //         ttl: 0,
-//     //         len: 0,
-//     //     })
-// }
+    // ParsedSection::Answer(Answer {
+    //         name: buf.get(q.start_index..q.end_index).unwrap().to_vec(),
+    //         atype: q.qtype,
+    //         class: q.class,
+    //         ttl: 0,
+    //         len: 0,
+    //     })
+}
 #[cfg(test)]
 mod tests {
     use super::*;
