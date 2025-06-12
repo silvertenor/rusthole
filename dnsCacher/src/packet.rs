@@ -155,3 +155,34 @@ impl Question {
         self.name = query;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_header() {
+        let mut buf: Vec<u8> = Vec::from([0; 512]);
+        for i in 0..12 {
+            buf[i] = 128 - i as u8;
+        }
+        let h = Header::new(&buf);
+        if let ParsedSection::Header(header) = h {
+            assert_eq!(header.id, 32895);
+            assert_eq!(header.response, false);
+            assert_eq!(header.opcode, 0b1111);
+            assert_eq!(header.aa, true);
+            assert_eq!(header.tc, true);
+            assert_eq!(header.rd, false);
+            assert_eq!(header.ra, false);
+            assert_eq!(header.z, 0b111);
+            assert_eq!(header.rcode, 0b1101);
+            assert_eq!(header.qdcount, 31867);
+            assert_eq!(header.ancount, 31353);
+            assert_eq!(header.nscount, 30839);
+            assert_eq!(header.arcount, 30325);
+        } else {
+            println!("Not a header!");
+        }
+    }
+}
