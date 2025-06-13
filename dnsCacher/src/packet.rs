@@ -226,12 +226,12 @@ pub struct Record {
     ip: [u8; 4],
 }
 impl Record {
-    pub fn new(q: &Query, dns_records: &HashMap<String, Vec<IpAddr>>) -> Record {
+    pub fn new(q: &Query) -> Record {
         // Get record:
-        let mut first: u8 = 127;
-        let mut second: u8 = 0;
-        let mut third: u8 = 0;
-        let mut fourth: u8 = 1;
+        let first: u8 = 127;
+        let second: u8 = 0;
+        let third: u8 = 0;
+        let fourth: u8 = 1;
         // if dns_records.contains_key(&q.name_str) {
         //     let ip_addr = &dns_records
         //         .get(&q.name_str)

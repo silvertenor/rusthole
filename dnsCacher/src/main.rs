@@ -1,7 +1,11 @@
 use dns_lookup::lookup_host;
 use std::io::Result;
 use std::net::{SocketAddr, UdpSocket};
-use std::{collections::HashMap, fs::read_to_string, net::IpAddr};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::read_to_string,
+    net::IpAddr,
+};
 pub mod packet;
 use crate::packet::{DnsPacket, Header, ParsedSection, Query, Record, Section};
 fn handle_section(section: Section, buf: &Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
@@ -41,7 +45,7 @@ struct ReturnType {
 fn handle_client(
     socket: &UdpSocket,
     message_buf: Vec<u8>,
-    dns_records: &HashMap<String, Vec<IpAddr>>,
+    dns_records: &HashSet<String>,
 ) -> ReturnType {
     let mut return_type = ReturnType {
         id: String::new(),
@@ -61,13 +65,13 @@ fn handle_client(
 
             if let ParsedSection::Question((question)) = q {
                 println!("Query: {:?}", &question.name_str);
-                if dns_records.contains_key(&question.name_str) {
+                if dns_records.contains(&question.name_str) {
                     // Start building response packet:
                     header.response = true;
                     header.ancount = 1;
                     dns_packet.set_header(header);
                     dns_packet.set_query(&question);
-                    let r = Record::new(&question, dns_records);
+                    let r = Record::new(&question);
                     dns_packet.set_answer(&r);
                     return_type.response = Some(dns_packet.build_packet());
                 } else {
@@ -87,13 +91,13 @@ fn handle_client(
 
 fn main() -> Result<()> {
     let lines: Vec<String> = get_hostnames_to_block("blockList.conf.prod");
-    let mut dns_records = HashMap::new();
+    let mut dns_records = HashSet::new();
     let mut count = 0;
     for line in lines {
         if let Ok(ips) = lookup_hostname(&line) {
             println!("{}", count);
             count += 1;
-            dns_records.insert(line, ips);
+            dns_records.insert(line);
         };
     }
 
