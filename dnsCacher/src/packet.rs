@@ -231,20 +231,20 @@ impl Record {
         let mut first: u8 = 127;
         let mut second: u8 = 0;
         let mut third: u8 = 0;
-        let mut fourth: u8 = 0;
-        if dns_records.contains_key(&q.name_str) {
-            let ip_addr = &dns_records
-                .get(&q.name_str)
-                .unwrap()
-                .get(0)
-                .unwrap()
-                .to_string();
-            let split: Vec<&str> = ip_addr.split('.').collect();
-            first = split.get(0).unwrap().parse().unwrap();
-            second = split.get(1).unwrap().parse().unwrap();
-            third = split.get(2).unwrap().parse().unwrap();
-            fourth = split.get(3).unwrap().parse().unwrap();
-        }
+        let mut fourth: u8 = 1;
+        // if dns_records.contains_key(&q.name_str) {
+        //     let ip_addr = &dns_records
+        //         .get(&q.name_str)
+        //         .unwrap()
+        //         .get(0)
+        //         .unwrap()
+        //         .to_string();
+        //     let split: Vec<&str> = ip_addr.split('.').collect();
+        //     first = split.get(0).unwrap().parse().unwrap();
+        //     second = split.get(1).unwrap().parse().unwrap();
+        //     third = split.get(2).unwrap().parse().unwrap();
+        //     fourth = split.get(3).unwrap().parse().unwrap();
+        // }
         let preamble = Preamble {
             name: q.name_bytes.to_vec(),
             rtype: q.qtype,
