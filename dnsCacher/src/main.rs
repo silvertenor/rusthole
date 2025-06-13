@@ -94,11 +94,9 @@ fn main() -> Result<()> {
     let mut dns_records = HashSet::new();
     let mut count = 0;
     for line in lines {
-        if let Ok(ips) = lookup_hostname(&line) {
-            println!("{}", count);
-            count += 1;
-            dns_records.insert(line);
-        };
+        println!("{}", count);
+        count += 1;
+        dns_records.insert(line);
     }
 
     let socket = UdpSocket::bind("0.0.0.0:53")?;
