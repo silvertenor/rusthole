@@ -1,7 +1,4 @@
 use std::fmt;
-use std::{collections::HashMap, net::IpAddr};
-
-use pnet::packet;
 
 #[derive(Debug)]
 pub struct DnsPacket {
@@ -277,7 +274,7 @@ impl fmt::Display for ParsedSection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ParsedSection::Header(h) => write!(f, "Header:\n{}", h),
-            ParsedSection::Question(q) => write!(f, "Question section"),
+            ParsedSection::Question(q) => write!(f, "Queery:\n{:?}", q),
             ParsedSection::Authority => write!(f, "Authority section"),
             ParsedSection::Additional => write!(f, "Additional section"),
         }

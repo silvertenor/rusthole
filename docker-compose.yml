@@ -1,0 +1,8 @@
+services:
+  rusthole:
+    build:
+      context: .
+    network_mode: host
+    ports:
+      - "53:53"
+    

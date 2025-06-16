@@ -1,14 +1,14 @@
-use dns_lookup::lookup_host;
+use dotenv::dotenv;
 use std::io::Result;
 use std::net::{SocketAddr, UdpSocket};
 use std::{
     collections::{HashMap, HashSet},
     env,
     fs::read_to_string,
-    net::IpAddr,
 };
 pub mod packet;
 use crate::packet::{DnsPacket, Header, ParsedSection, Query, Record, Section};
+
 fn handle_section(section: Section, buf: &Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
     match section {
         Section::Header => Header::new(&buf, dns_packet),
@@ -16,7 +16,7 @@ fn handle_section(section: Section, buf: &Vec<u8>, dns_packet: &mut DnsPacket) -
         // Section::Answer => ,
         Section::Authority => ParsedSection::Authority, // Not yet implemented
         Section::Additional => ParsedSection::Additional, // Not yet implemented
-        _ => ParsedSection::Additional,                 // Catch-all
+                                                         // _ => ParsedSection::Additional,                 // Catch-all
     }
 }
 fn get_hostnames_to_block(filename: &str) -> Vec<String> {
@@ -42,6 +42,7 @@ fn handle_client(
     socket: &UdpSocket,
     message_buf: Vec<u8>,
     dns_records: &HashSet<String>,
+    default_dns_server: &String,
 ) -> ReturnType {
     let mut return_type = ReturnType {
         id: String::new(),
@@ -59,7 +60,7 @@ fn handle_client(
             // Get question from packet
             let q = handle_section(Section::Question, &message_buf, &mut dns_packet);
 
-            if let ParsedSection::Question((question)) = q {
+            if let ParsedSection::Question(question) = q {
                 println!("Query: {:?}", &question.name_str);
                 if dns_records.contains(&question.name_str) {
                     // Start building response packet:
@@ -72,9 +73,8 @@ fn handle_client(
                     return_type.response = Some(dns_packet.build_packet());
                 } else {
                     println!("Query not in block list. Forwarding to gateway");
-                    socket
-                        .send_to(&message_buf, "192.168.50.1:53")
-                        .expect("error");
+                    let default_server = default_dns_server.to_owned() + ":53";
+                    socket.send_to(&message_buf, default_server).expect("error");
                 };
             }
         } else {
@@ -86,12 +86,13 @@ fn handle_client(
 }
 
 fn main() -> Result<()> {
+    // Variable initialization
+    dotenv().ok();
+    let default_dns_server = env::var("DEFAULT_DNS_SERVER").unwrap();
+    println!("{default_dns_server}");
     let lines: Vec<String> = get_hostnames_to_block("blockList.conf.prod");
     let mut dns_records = HashSet::new();
-    let mut count = 0;
     for line in lines {
-        println!("{}", count);
-        count += 1;
         dns_records.insert(line);
     }
 
@@ -104,7 +105,7 @@ fn main() -> Result<()> {
         let mut buf = [0; 512];
         let (number_of_bytes, src_addr) = socket.recv_from(&mut buf).expect("Didn't receive data");
         let filled_buf = Vec::from(buf.get(..number_of_bytes).unwrap());
-        let result = handle_client(&socket, filled_buf, &dns_records);
+        let result = handle_client(&socket, filled_buf, &dns_records, &default_dns_server);
         match result.response {
             Some(r) => {
                 println!("Response received for ID: {:?}", result.id);
