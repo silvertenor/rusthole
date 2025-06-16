@@ -3,6 +3,7 @@ use std::io::Result;
 use std::net::{SocketAddr, UdpSocket};
 use std::{
     collections::{HashMap, HashSet},
+    env,
     fs::read_to_string,
     net::IpAddr,
 };
@@ -13,9 +14,9 @@ fn handle_section(section: Section, buf: &Vec<u8>, dns_packet: &mut DnsPacket) -
         Section::Header => Header::new(&buf, dns_packet),
         Section::Question => Query::new(buf.to_vec(), dns_packet),
         // Section::Answer => ,
-        Section::Authority => ParsedSection::Authority,
-        Section::Additional => ParsedSection::Additional,
-        _ => ParsedSection::Additional,
+        Section::Authority => ParsedSection::Authority, // Not yet implemented
+        Section::Additional => ParsedSection::Additional, // Not yet implemented
+        _ => ParsedSection::Additional,                 // Catch-all
     }
 }
 fn get_hostnames_to_block(filename: &str) -> Vec<String> {
@@ -30,11 +31,6 @@ fn get_hostnames_to_block(filename: &str) -> Vec<String> {
         };
     }
     result
-}
-
-fn lookup_hostname(hostname: &String) -> Result<Vec<IpAddr>> {
-    let ips = lookup_host(hostname)?;
-    Ok(ips)
 }
 
 #[derive(Debug)]
