@@ -1,5 +1,5 @@
 To run:
-
+IF USING UBUNTU, FOLLOW THE INSTRUCTIONS TO FREE UP PORT 53 ON THE HOST! https://www.linuxuprising.com/2020/07/ubuntu-how-to-free-up-port-53-used-by.html
 1. edit .env.sample to your preferred values (most likely your default DNS server will be your home's gateway)
 2. rename .env.sample to .env
 
