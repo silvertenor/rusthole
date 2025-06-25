@@ -66,7 +66,7 @@ impl DnsPacket {
         &self.question
     }
 
-    pub fn set_answer(&mut self, r: &Record) {
+    pub fn set_answer(&mut self, r: &FalseRecord) {
         let mut packet_record: Vec<u8> = Vec::new();
         packet_record.extend_from_slice(&r.preamble.name);
         packet_record.extend_from_slice(&r.preamble.rtype.to_be_bytes());
@@ -208,30 +208,17 @@ pub struct Preamble {
 }
 
 #[derive(Debug)]
-pub struct Record {
+pub struct FalseRecord {
     preamble: Preamble,
     ip: [u8; 4],
 }
-impl Record {
-    pub fn new(q: &Query) -> Record {
-        // Get record:
+impl FalseRecord {
+    pub fn new(q: &Query) -> FalseRecord {
+        // 127.0.0.1 is loopback - effectively "blocks" IP from requestor
         let first: u8 = 127;
         let second: u8 = 0;
         let third: u8 = 0;
         let fourth: u8 = 1;
-        // if dns_records.contains_key(&q.name_str) {
-        //     let ip_addr = &dns_records
-        //         .get(&q.name_str)
-        //         .unwrap()
-        //         .get(0)
-        //         .unwrap()
-        //         .to_string();
-        //     let split: Vec<&str> = ip_addr.split('.').collect();
-        //     first = split.get(0).unwrap().parse().unwrap();
-        //     second = split.get(1).unwrap().parse().unwrap();
-        //     third = split.get(2).unwrap().parse().unwrap();
-        //     fourth = split.get(3).unwrap().parse().unwrap();
-        // }
         let preamble = Preamble {
             name: q.name_bytes.to_vec(),
             rtype: q.qtype,
@@ -239,7 +226,7 @@ impl Record {
             ttl: 600,
             len: 4,
         };
-        Record {
+        FalseRecord {
             preamble,
             ip: [first, second, third, fourth],
         }

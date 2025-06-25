@@ -7,7 +7,7 @@ use std::{
     fs::read_to_string,
 };
 pub mod packet;
-use crate::packet::{DnsPacket, Header, Query, Record};
+use crate::packet::{DnsPacket, FalseRecord, Header, Query};
 
 fn get_hostnames_to_block(filename: &str) -> Vec<String> {
     let mut result = Vec::new();
@@ -23,55 +23,51 @@ fn get_hostnames_to_block(filename: &str) -> Vec<String> {
     result
 }
 
-#[derive(Debug)]
-struct ReturnType {
-    id: String,
-    response: Option<Vec<u8>>,
-}
 fn handle_client(
     socket: &UdpSocket,
     message_buf: Vec<u8>,
     dns_records: &HashSet<String>,
     default_dns_server: &String,
-) -> ReturnType {
-    // Initialize Return Type
-    let mut return_type = ReturnType {
-        id: String::new(),
-        response: None,
-    };
+) -> (String, Option<Vec<u8>>) {
+    // Initialize response (will stay None if packet is query and is forwarded to gateway)
+    let mut response = None;
+    // packet to be returned if query is in block list OR packet is a response from GW
     let mut dns_packet = DnsPacket::new(&message_buf);
+
     // Extract header from buffer
     let mut header: Header = Header::new(&message_buf, &mut dns_packet);
 
+    let id = header.id.to_string();
     // If header is DNS query, parse the queries - if not, forward the packet
-    return_type.id = header.id.to_string();
-    // If packet is a DNS query:
+    // back to the original requestor
     if !header.response {
         println!("Incoming query!");
-        // Get query from packet
+        // Get query from packet and instantiate struct
         let query = Query::new(message_buf.to_vec(), &mut dns_packet);
-
         println!("Query: {:?}", &query.name_str);
+        // If query is in block list, build "false" packet to send to requestor
         if dns_records.contains(&query.name_str) {
-            // Start building response packet:
+            // Build fake response packet
             header.response = true;
             header.ancount = 1;
             dns_packet.set_header(header);
             dns_packet.set_query(&query);
-            let r = Record::new(&query);
+            let r: FalseRecord = FalseRecord::new(&query);
             dns_packet.set_answer(&r);
-            return_type.response = Some(dns_packet.build_packet());
+            response = Some(dns_packet.build_packet());
         } else {
-            println!("Query not in block list. Forwarding to gateway");
+            // If query is not in block list, forward it to the gateway
             let default_server = default_dns_server.to_owned() + ":53";
             socket.send_to(&message_buf, default_server).expect("error");
+            // Note we are not waiting for a response here, instead, ID of
+            // return type will be stored in hash map along with requestor's IP
         };
     } else {
         // if message is response
-        return_type.response = Some(message_buf);
+        response = Some(message_buf);
     }
 
-    return_type
+    (id, response)
 }
 
 fn main() -> Result<()> {
@@ -97,16 +93,16 @@ fn main() -> Result<()> {
         let (number_of_bytes, src_addr) = socket.recv_from(&mut buf).expect("Didn't receive data");
         let filled_buf = Vec::from(buf.get(..number_of_bytes).unwrap());
         let result = handle_client(&socket, filled_buf, &dns_records, &default_dns_server);
-        match result.response {
+        match result.1 {
             Some(r) => {
-                println!("Response received for ID: {:?}", result.id);
-                if clients.contains_key(&result.id) {
+                println!("Response received for ID: {:?}", result.0);
+                if clients.contains_key(&result.0) {
                     println!(
                         "Response is for previous entry in hash map. Sending to {:?}",
-                        &clients.get(&result.id).unwrap()
+                        &clients.get(&result.0).unwrap()
                     );
-                    socket.send_to(&r, &clients.get(&result.id).unwrap())?;
-                    clients.remove_entry(&result.id);
+                    socket.send_to(&r, &clients.get(&result.0).unwrap())?;
+                    clients.remove_entry(&result.0);
                 } else {
                     socket.send_to(&r, src_addr)?;
                 }
@@ -114,9 +110,9 @@ fn main() -> Result<()> {
             None => {
                 println!(
                     "No response received. Inserting ID {} into hash map with source address {:?}",
-                    result.id, src_addr
+                    result.0, src_addr
                 );
-                clients.insert(result.id, src_addr);
+                clients.insert(result.0, src_addr);
             }
         }
     }
