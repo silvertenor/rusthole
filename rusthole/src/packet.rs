@@ -5,8 +5,6 @@ pub struct DnsPacket {
     header: Option<Vec<u8>>,
     question: Option<Vec<u8>>,
     answer: Option<Vec<u8>>,
-    pub authority: Option<Vec<u8>>,
-    pub additional: Option<Vec<u8>>,
     pub bytes: Vec<u8>,
     pub byte_pointer: usize,
 }
@@ -16,8 +14,6 @@ impl DnsPacket {
             header: None,
             question: None,
             answer: None,
-            authority: None,
-            additional: None,
             bytes: buf.to_vec(),
             byte_pointer: 0,
         }
@@ -33,12 +29,6 @@ impl DnsPacket {
         }
         if let Some(answer) = &self.get_answer() {
             response_buf.extend_from_slice(&answer);
-        }
-        if Option::is_some(&self.authority) {
-            todo!();
-        }
-        if Option::is_some(&self.additional) {
-            todo!();
         }
         response_buf
     }
@@ -109,10 +99,10 @@ pub struct Header {
     arcount: u16,
 }
 impl Header {
-    pub fn new(buf: &Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
+    pub fn new(buf: &Vec<u8>, dns_packet: &mut DnsPacket) -> Header {
         // Increment byte pointer to 12 - the first byte after the header
         dns_packet.byte_pointer = 12;
-        ParsedSection::Header(Header {
+        Header {
             id: u16::from(buf[0]) << 8 | buf[1] as u16,
             response: buf[2] >> 7 & 1 != 0,
             opcode: buf[2] >> 3 & 0x0F,
@@ -126,7 +116,7 @@ impl Header {
             ancount: u16::from(buf[6]) << 8 | buf[7] as u16,
             nscount: u16::from(buf[8]) << 8 | buf[9] as u16,
             arcount: u16::from(buf[10]) << 8 | buf[11] as u16,
-        })
+        }
     }
 }
 impl fmt::Display for Header {
@@ -173,7 +163,7 @@ pub struct Query {
     pub end_index: usize,
 }
 impl Query {
-    pub fn new(message_buf: Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
+    pub fn new(message_buf: Vec<u8>, dns_packet: &mut DnsPacket) -> Query {
         let start_index = dns_packet.byte_pointer as usize; // for struct
         let mut bp = dns_packet.byte_pointer; // to save space in arr indexing
         let mut query = String::new();
@@ -197,14 +187,14 @@ impl Query {
         let qtype = u16::from(message_buf[bp]) << 8 | message_buf[bp + 1] as u16;
         let class = u16::from(message_buf[bp + 2]) << 8 | message_buf[bp + 3] as u16;
         dns_packet.byte_pointer += 3;
-        ParsedSection::Question(Query {
+        Query {
             name_str,
             name_bytes,
             qtype,
             class,
             start_index,
             end_index,
-        })
+        }
     }
 }
 
@@ -255,31 +245,6 @@ impl Record {
         }
     }
 }
-pub enum Section {
-    Header,
-    Question,
-    // Answer,
-    Authority,
-    Additional,
-}
-
-#[derive(Debug)]
-pub enum ParsedSection {
-    Header(Header),
-    Question(Query),
-    Authority,
-    Additional,
-}
-impl fmt::Display for ParsedSection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ParsedSection::Header(h) => write!(f, "Header:\n{}", h),
-            ParsedSection::Question(q) => write!(f, "Queery:\n{:?}", q),
-            ParsedSection::Authority => write!(f, "Authority section"),
-            ParsedSection::Additional => write!(f, "Additional section"),
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -292,23 +257,19 @@ mod tests {
             buf[i] = 128 - i as u8;
         }
         let mut dns_packet = DnsPacket::new(&buf);
-        let h = Header::new(&buf, &mut dns_packet);
-        if let ParsedSection::Header(header) = h {
-            assert_eq!(header.id, 32895);
-            assert_eq!(header.response, false);
-            assert_eq!(header.opcode, 0b1111);
-            assert_eq!(header.aa, true);
-            assert_eq!(header.tc, true);
-            assert_eq!(header.rd, false);
-            assert_eq!(header.ra, false);
-            assert_eq!(header.z, 0b111);
-            assert_eq!(header.rcode, 0b1101);
-            assert_eq!(header.qdcount, 31867);
-            assert_eq!(header.ancount, 31353);
-            assert_eq!(header.nscount, 30839);
-            assert_eq!(header.arcount, 30325);
-        } else {
-            println!("Not a header!");
-        }
+        let header = Header::new(&buf, &mut dns_packet);
+        assert_eq!(header.id, 32895);
+        assert_eq!(header.response, false);
+        assert_eq!(header.opcode, 0b1111);
+        assert_eq!(header.aa, true);
+        assert_eq!(header.tc, true);
+        assert_eq!(header.rd, false);
+        assert_eq!(header.ra, false);
+        assert_eq!(header.z, 0b111);
+        assert_eq!(header.rcode, 0b1101);
+        assert_eq!(header.qdcount, 31867);
+        assert_eq!(header.ancount, 31353);
+        assert_eq!(header.nscount, 30839);
+        assert_eq!(header.arcount, 30325);
     }
 }

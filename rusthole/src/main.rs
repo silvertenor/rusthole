@@ -7,18 +7,8 @@ use std::{
     fs::read_to_string,
 };
 pub mod packet;
-use crate::packet::{DnsPacket, Header, ParsedSection, Query, Record, Section};
+use crate::packet::{DnsPacket, Header, Query, Record};
 
-fn handle_section(section: Section, buf: &Vec<u8>, dns_packet: &mut DnsPacket) -> ParsedSection {
-    match section {
-        Section::Header => Header::new(&buf, dns_packet),
-        Section::Question => Query::new(buf.to_vec(), dns_packet),
-        // Section::Answer => ,
-        Section::Authority => ParsedSection::Authority, // Not yet implemented
-        Section::Additional => ParsedSection::Additional, // Not yet implemented
-                                                         // _ => ParsedSection::Additional,                 // Catch-all
-    }
-}
 fn get_hostnames_to_block(filename: &str) -> Vec<String> {
     let mut result = Vec::new();
     for rawline in read_to_string(filename).unwrap().lines() {
@@ -44,44 +34,43 @@ fn handle_client(
     dns_records: &HashSet<String>,
     default_dns_server: &String,
 ) -> ReturnType {
+    // Initialize Return Type
     let mut return_type = ReturnType {
         id: String::new(),
         response: None,
     };
     let mut dns_packet = DnsPacket::new(&message_buf);
     // Extract header from buffer
-    let h = handle_section(Section::Header, &message_buf, &mut dns_packet);
-    // If header is DNS query, parse the queries - if not, forward the packet
-    if let ParsedSection::Header(mut header) = h {
-        return_type.id = header.id.to_string();
-        // If packet is a DNS query:
-        if !header.response {
-            println!("Incoming query!");
-            // Get question from packet
-            let q = handle_section(Section::Question, &message_buf, &mut dns_packet);
+    let mut header: Header = Header::new(&message_buf, &mut dns_packet);
 
-            if let ParsedSection::Question(question) = q {
-                println!("Query: {:?}", &question.name_str);
-                if dns_records.contains(&question.name_str) {
-                    // Start building response packet:
-                    header.response = true;
-                    header.ancount = 1;
-                    dns_packet.set_header(header);
-                    dns_packet.set_query(&question);
-                    let r = Record::new(&question);
-                    dns_packet.set_answer(&r);
-                    return_type.response = Some(dns_packet.build_packet());
-                } else {
-                    println!("Query not in block list. Forwarding to gateway");
-                    let default_server = default_dns_server.to_owned() + ":53";
-                    socket.send_to(&message_buf, default_server).expect("error");
-                };
-            }
+    // If header is DNS query, parse the queries - if not, forward the packet
+    return_type.id = header.id.to_string();
+    // If packet is a DNS query:
+    if !header.response {
+        println!("Incoming query!");
+        // Get query from packet
+        let query = Query::new(message_buf.to_vec(), &mut dns_packet);
+
+        println!("Query: {:?}", &query.name_str);
+        if dns_records.contains(&query.name_str) {
+            // Start building response packet:
+            header.response = true;
+            header.ancount = 1;
+            dns_packet.set_header(header);
+            dns_packet.set_query(&query);
+            let r = Record::new(&query);
+            dns_packet.set_answer(&r);
+            return_type.response = Some(dns_packet.build_packet());
         } else {
-            // if message is response
-            return_type.response = Some(message_buf);
-        }
+            println!("Query not in block list. Forwarding to gateway");
+            let default_server = default_dns_server.to_owned() + ":53";
+            socket.send_to(&message_buf, default_server).expect("error");
+        };
+    } else {
+        // if message is response
+        return_type.response = Some(message_buf);
     }
+
     return_type
 }
 
@@ -89,18 +78,20 @@ fn main() -> Result<()> {
     // Variable initialization
     dotenv().ok();
     let default_dns_server = env::var("DEFAULT_DNS_SERVER").unwrap();
-    println!("{default_dns_server}");
+    // Get blocked IPs
     let lines: Vec<String> = get_hostnames_to_block("blockList.conf.prod");
     let mut dns_records = HashSet::new();
     for line in lines {
         dns_records.insert(line);
     }
 
+    // Initialize UDP server
     let socket = UdpSocket::bind("0.0.0.0:53")?;
-    println!("DNS server running on 0.0.0.0:53");
+
+    // Create hashmap for temp storage of forwarded packets: {request ID: requestor's IP address}
     let mut clients: HashMap<String, SocketAddr> = HashMap::new(); // DNS QUERY ID: IP ADDRESS THAT REQUESTED IT
     loop {
-        println!("{:?}", clients);
+        // println!("{:?}", clients);
         // DNS packets are limited to 512 bytes
         let mut buf = [0; 512];
         let (number_of_bytes, src_addr) = socket.recv_from(&mut buf).expect("Didn't receive data");
