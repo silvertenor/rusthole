@@ -87,7 +87,7 @@ fn main() -> Result<()> {
     // Create hashmap for temp storage of forwarded packets: {request ID: requestor's IP address}
     let mut clients: HashMap<String, SocketAddr> = HashMap::new(); // DNS QUERY ID: IP ADDRESS THAT REQUESTED IT
     loop {
-        // println!("{:?}", clients);
+        println!("{:?}", clients);
         // DNS packets are limited to 512 bytes
         let mut buf = [0; 512];
         let (number_of_bytes, src_addr) = socket.recv_from(&mut buf).expect("Didn't receive data");
