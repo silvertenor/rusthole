@@ -2,10 +2,18 @@ services:
   rusthole:
     build:
       context: .
-    network_mode: host
+    networks:
+      - internal
     ports:
       - "53:53"
+    
   reporting:
     build:
       context: .
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
     
