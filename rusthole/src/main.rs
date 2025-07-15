@@ -1,10 +1,11 @@
 use dotenv::dotenv;
-use std::io::Result;
-use std::net::{SocketAddr, UdpSocket};
+use std::io::{Result, Write};
+use std::net::{SocketAddr, TcpStream, UdpSocket};
 use std::{
     collections::{HashMap, HashSet},
     env,
     fs::read_to_string,
+    thread,
 };
 pub mod packet;
 use crate::packet::{DnsPacket, FalseRecord, Header, Query};
@@ -26,7 +27,7 @@ fn get_hostnames_to_block(filename: &str) -> Vec<String> {
 fn handle_client(
     socket: &UdpSocket,
     message_buf: Vec<u8>,
-    dns_records: &HashSet<String>,
+    blocked_sites: &HashSet<String>,
     default_dns_server: &String,
 ) -> (String, Option<Vec<u8>>) {
     // Initialize response (will stay None if packet is query and is forwarded to gateway)
@@ -46,7 +47,7 @@ fn handle_client(
         let query = Query::new(message_buf.to_vec(), &mut dns_packet);
         println!("Query: {:?}", &query.name_str);
         // If query is in block list, build "false" packet to send to requestor
-        if dns_records.contains(&query.name_str) {
+        if blocked_sites.contains(&query.name_str) {
             // Build fake response packet
             header.response = true;
             header.ancount = 1;
@@ -55,6 +56,12 @@ fn handle_client(
             let r: FalseRecord = FalseRecord::new(&query);
             dns_packet.set_answer(&r);
             response = Some(dns_packet.build_packet());
+            thread::spawn(move || {
+                let analytics_server = "127.0.0.1:49152";
+                let mut stream: TcpStream = TcpStream::connect(analytics_server).unwrap();
+                stream.write_all(&query.name_str.as_bytes()).unwrap();
+                stream.shutdown(std::net::Shutdown::Both).unwrap();
+            });
         } else {
             // If query is not in block list, forward it to the gateway
             let default_server = default_dns_server.to_owned() + ":53";

@@ -5,4 +5,7 @@ services:
     network_mode: host
     ports:
       - "53:53"
+  reporting:
+    build:
+      context: .
     
