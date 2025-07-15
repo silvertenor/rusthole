@@ -10,4 +10,5 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.reporting
-    network_mode: host
+    ports:
+      - "8080:8080"
