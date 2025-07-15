@@ -57,7 +57,7 @@ fn handle_client(
             dns_packet.set_answer(&r);
             response = Some(dns_packet.build_packet());
             thread::spawn(move || {
-                let analytics_server = "192.168.50.15:8080";
+                let analytics_server = "127.0.0.1:8080";
                 let mut stream: TcpStream = TcpStream::connect(analytics_server).unwrap();
                 stream.write_all(&query.name_str.as_bytes()).unwrap();
                 stream.shutdown(std::net::Shutdown::Both).unwrap();
