@@ -5,8 +5,8 @@ from modules.db import *
 
 create_or_connect_db('rusthole-reporting.db')
 # Listen to other service:
-HOST = 'localhost'
-PORT = 49152
+HOST = '0.0.0.0'
+PORT = 8080
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.bind((HOST, PORT))

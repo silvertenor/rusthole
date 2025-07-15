@@ -2,18 +2,13 @@ services:
   rusthole:
     build:
       context: .
-    networks:
-      - internal
+    network_mode: host
     ports:
       - "53:53"
     
   reporting:
     build:
       context: .
-    networks:
-      - internal
-
-networks:
-  internal:
-    driver: bridge
+    ports:
+      - "8080:8080"
     
