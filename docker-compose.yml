@@ -9,4 +9,5 @@ services:
   reporting:
     build:
       context: .
+      dockerfile: Dockerfile.reporting
     network_mode: host
