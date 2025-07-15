@@ -4,4 +4,6 @@ WORKDIR /reporting
 
 COPY rusthole/reporting /reporting
 
+ENV PYTHONUNBUFFERED=1
+
 ENTRYPOINT ["python", "main.py"]
