@@ -96,7 +96,7 @@ pub struct Header {
     pub qdcount: u16,
     pub ancount: u16,
     nscount: u16,
-    arcount: u16,
+    pub arcount: u16,
 }
 impl Header {
     pub fn new(buf: &Vec<u8>, dns_packet: &mut DnsPacket) -> Header {

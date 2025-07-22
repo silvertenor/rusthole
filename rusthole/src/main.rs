@@ -51,6 +51,7 @@ fn handle_client(
             // Build fake response packet
             header.response = true;
             header.ancount = 1;
+            header.arcount = 0;
             dns_packet.set_header(header);
             dns_packet.set_query(&query);
             let r: FalseRecord = FalseRecord::new(&query);
